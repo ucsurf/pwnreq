@@ -1,0 +1,35 @@
+name: pwnreq
+description: Find pwn requests and script injection in GitHub Actions workflows
+branding:
+  icon: shield
+  color: red
+inputs:
+  path:
+    description: Directory or workflow files to scan
+    default: "."
+  min-severity:
+    description: medium or high
+    default: medium
+  sarif:
+    description: Path to also write a SARIF report to (empty = skip)
+    default: ""
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      with:
+        go-version: stable
+        cache: false
+    - shell: bash
+      env:
+        PWNREQ_REF: ${{ github.action_ref }}
+        IN_PATH: ${{ inputs.path }}
+        IN_SEV: ${{ inputs.min-severity }}
+        IN_SARIF: ${{ inputs.sarif }}
+      run: |
+        GOBIN="$RUNNER_TEMP/pwnreq-bin" go install "github.com/ucsurf/pwnreq/cmd/pwnreq@${PWNREQ_REF:-latest}"
+        bin="$RUNNER_TEMP/pwnreq-bin/pwnreq"
+        if [ -n "$IN_SARIF" ]; then
+          "$bin" -format sarif -min-severity "$IN_SEV" $IN_PATH > "$IN_SARIF" || true
+        fi
+        "$bin" -min-severity "$IN_SEV" $IN_PATH

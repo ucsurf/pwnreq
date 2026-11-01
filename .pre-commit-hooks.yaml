@@ -1,0 +1,6 @@
+- id: pwnreq
+  name: pwnreq
+  description: Find pwn requests and script injection in GitHub Actions workflows
+  entry: pwnreq
+  language: golang
+  files: ^\.github/workflows/.*\.ya?ml$

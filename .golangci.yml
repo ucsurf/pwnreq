@@ -1,0 +1,28 @@
+version: "2"
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - ineffassign
+    - misspell
+    - gosec
+  settings:
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (net/http.ResponseWriter).Write
+    staticcheck:
+      checks: ["all", "-QF1001", "-ST1000"]
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters: [gosec]
+      # reading the files the user asked us to scan is the point of the tool
+      - linters: [gosec]
+        text: "G304|G122"
+      - linters: [errcheck]
+        source: "fmt.Fprint"
+formatters:
+  enable: [gofmt]
