@@ -27,13 +27,13 @@ runs:
       run: |
         set -euo pipefail
         ver="${IN_VERSION:-}"
-        [ -z "$ver" ] && ver="${ACTION_REF:-}"
+        if [ -z "$ver" ]; then ver="${ACTION_REF:-}"; fi
         dir="$RUNNER_TEMP/pwnreq-bin"; mkdir -p "$dir"
-        exe=pwnreq; [ "$RUNNER_OS" = Windows ] && exe=pwnreq.exe
+        exe=pwnreq; if [ "$RUNNER_OS" = Windows ]; then exe=pwnreq.exe; fi
         if [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
           case "$RUNNER_OS" in Linux) os=linux;; macOS) os=darwin;; Windows) os=windows;; *) echo "unsupported OS $RUNNER_OS"; exit 1;; esac
           case "$RUNNER_ARCH" in X64) arch=amd64;; ARM64) arch=arm64;; *) echo "unsupported arch $RUNNER_ARCH"; exit 1;; esac
-          ext=tar.gz; [ "$os" = windows ] && ext=zip
+          ext=tar.gz; if [ "$os" = windows ]; then ext=zip; fi
           file="pwnreq_${ver#v}_${os}_${arch}.${ext}"
           base="https://github.com/ucsurf/pwnreq/releases/download/${ver}"
           curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
