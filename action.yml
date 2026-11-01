@@ -11,7 +11,7 @@ inputs:
     description: medium or high
     default: medium
   version:
-    description: Release to download, e.g. v0.1.1. Defaults to the tag the action is pinned to; builds from source (needs Go) when that is not a release tag
+    description: Release to download, e.g. v0.1.1. Defaults to the tag the action is pinned to; builds from source when that is not a release tag
     default: ""
   sarif:
     description: Path to also write a SARIF report to (empty = skip)
@@ -19,6 +19,21 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Resolve pwnreq version
+      id: resolve
+      shell: bash
+      env:
+        IN_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        ver="${IN_VERSION:-${ACTION_REF:-}}"
+        if [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then echo "mode=release" >> "$GITHUB_OUTPUT"; else echo "mode=source" >> "$GITHUB_OUTPUT"; fi
+    - name: Set up Go (only when building from source)
+      if: steps.resolve.outputs.mode == 'source'
+      uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
+      with:
+        go-version-file: ${{ github.action_path }}/go.mod
+        cache: false
     - name: Install pwnreq
       shell: bash
       env:

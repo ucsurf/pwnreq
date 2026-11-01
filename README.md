@@ -94,7 +94,7 @@ jobs:
 
 Inputs: `path` (default `.`), `min-severity` (`medium`/`high`), `sarif` (path for a SARIF report), `version` (release to use; defaults to the tag you pinned).
 
-The action downloads the prebuilt release binary for the runner (Linux, macOS, Windows; x64 and arm64) and verifies it against `checksums.txt`, so it adds about a second to your job and needs no Go toolchain. Pinned to a branch or commit SHA instead of a tag, it builds from source with the runner's Go.
+The action downloads the prebuilt release binary for the runner (Linux, macOS, Windows; x64 and arm64) and verifies it against `checksums.txt`, so it adds about a second to your job and needs no Go toolchain. Pinned to a branch or commit SHA instead of a tag, it sets up Go and builds from source.
 
 ## pre-commit
 
