@@ -106,6 +106,35 @@ jobs:
         with: {ref: "${{ github.event.workflow_run.head_sha }}"}
       - run: make
 `, nil},
+		{"gate inherited through needs", `on: pull_request_target
+jobs:
+  authorize:
+    environment: ${{ github.event.pull_request.head.repo.full_name != github.repository && 'external' || 'internal' }}
+    steps:
+      - run: echo ok
+  test:
+    needs: [authorize]
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.event.pull_request.head.sha }}"}
+      - run: make
+`, []want{{RulePwnRequest, Medium, 10}}},
+		{"workflow_run checkout is medium unless tied to PRs", `on:
+  workflow_run:
+    workflows: [ci]
+jobs:
+  a:
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.event.workflow_run.head_sha }}"}
+      - run: make
+  b:
+    if: github.event.workflow_run.event == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with: {ref: "${{ github.event.workflow_run.head_sha }}"}
+      - run: make
+`, []want{{RulePwnRequest, Medium, 7}, {RulePwnRequest, High, 13}}},
 		{"script injection in run block", `"on":
   issues:
     types: [opened]

@@ -65,6 +65,7 @@ var (
 	wrPushRe = regexp.MustCompile(`workflow_run\.event\s*==\s*'(?:push|schedule|release|workflow_dispatch)'|workflow_run\.event\s*!=\s*'pull_request'`)
 	// steps that don't execute code from the checked-out tree.
 	inertUses = regexp.MustCompile(`^(?i)(actions/(upload-artifact|download-artifact|cache/save|labeler|stale|first-interaction)|peter-evans/(create-or-update-comment|find-comment)|marocchino/sticky-pull-request-comment|thollander/actions-comment-pull-request|mshick/add-pr-comment)@`)
+	wrPRRe    = regexp.MustCompile(`workflow_run\.event\s*==\s*'pull_request`)
 	gateRe    = regexp.MustCompile(`author_association|github\.actor\s*==|head\.repo\.full_name\s*==\s*github\.repository|head\.repo\.fork\s*==\s*false|!github\.event\.pull_request\.head\.repo\.fork|contains\(github\.event\.pull_request\.labels|github\.event\.label\.name|github\.event\.workflow_run\.head_repository\.full_name\s*==|github\.repository_owner\s*==\s*github\.actor`)
 )
 
@@ -92,6 +93,7 @@ func Workflow(name string, data []byte) ([]Finding, error) {
 	if jobs == nil || jobs.Kind != yaml.MappingNode {
 		return nil, nil
 	}
+	gates := jobGates(jobs)
 	var out []Finding
 	for i := 0; i+1 < len(jobs.Content); i += 2 {
 		jobName, job := jobs.Content[i].Value, jobs.Content[i+1]
@@ -102,8 +104,7 @@ func Workflow(name string, data []byte) ([]Finding, error) {
 		if onlyUnprivEvents(jobIf, priv) || wrPushRe.MatchString(jobIf) {
 			continue
 		}
-		// a deployment environment can require manual approval.
-		gated := gateRe.MatchString(jobIf) || get(job, "environment") != nil
+		gated := gates[jobName]
 		steps := get(job, "steps")
 		if steps == nil || steps.Kind != yaml.SequenceNode {
 			continue
@@ -124,13 +125,19 @@ func Workflow(name string, data []byte) ([]Finding, error) {
 				ref := str(get(get(step, "with"), "ref")) + " " + str(get(get(step, "with"), "repository"))
 				if untrustedRefRe.MatchString(ref) && !onlyUnprivEvents(ref, priv) && anyTrigger(priv, checkoutTriggers) != "" && executesLater(steps.Content[si+1:]) {
 					checkedOut = si
+					trig := anyTrigger(priv, checkoutTriggers)
 					sev := High
+					note := gatedNote(stepGated)
 					if stepGated {
 						sev = Medium
+					} else if trig == "workflow_run" && !wrPRRe.MatchString(jobIf+" "+stepIf) {
+						// only exploitable when the upstream workflow runs on pull_request
+						sev = Medium
+						note = " [high if the upstream workflow runs on pull_request]"
 					}
 					out = append(out, Finding{Rule: RulePwnRequest, Severity: sev, File: name, Line: step.Line, Job: jobName,
 						Trigger:  anyTrigger(priv, checkoutTriggers),
-						Message:  "privileged workflow checks out untrusted PR code and then runs more steps (pwn request)" + gatedNote(stepGated),
+						Message:  "privileged workflow checks out untrusted PR code and then runs more steps (pwn request)" + note,
 						Evidence: "ref: " + strings.TrimSpace(str(get(get(step, "with"), "ref")))})
 				}
 			}
@@ -156,6 +163,39 @@ func Workflow(name string, data []byte) ([]Finding, error) {
 	}
 	sort.SliceStable(out, func(a, b int) bool { return out[a].Line < out[b].Line })
 	return out, nil
+}
+
+// jobGates reports, per job, whether it is gated by an actor/label check or
+// a deployment environment (which can require approval), either itself or
+// through any job it needs.
+func jobGates(jobs *yaml.Node) map[string]bool {
+	own := map[string]bool{}
+	needs := map[string][]string{}
+	for i := 0; i+1 < len(jobs.Content); i += 2 {
+		name, job := jobs.Content[i].Value, jobs.Content[i+1]
+		own[name] = gateRe.MatchString(str(get(job, "if"))) || get(job, "environment") != nil
+		needs[name] = triggerNames(get(job, "needs"))
+	}
+	out := map[string]bool{}
+	var visit func(string, int) bool
+	visit = func(n string, depth int) bool {
+		if own[n] {
+			return true
+		}
+		if depth > 50 {
+			return false
+		}
+		for _, d := range needs[n] {
+			if visit(d, depth+1) {
+				return true
+			}
+		}
+		return false
+	}
+	for n := range own {
+		out[n] = visit(n, 0)
+	}
+	return out
 }
 
 // onlyUnprivEvents reports whether expr restricts itself to event names
