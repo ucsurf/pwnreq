@@ -10,26 +10,53 @@ inputs:
   min-severity:
     description: medium or high
     default: medium
+  version:
+    description: Release to download, e.g. v0.1.1. Defaults to the tag the action is pinned to; builds from source (needs Go) when that is not a release tag
+    default: ""
   sarif:
     description: Path to also write a SARIF report to (empty = skip)
     default: ""
 runs:
   using: composite
   steps:
-    - uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
-      with:
-        go-version: stable
-        cache: false
-    - shell: bash
+    - name: Install pwnreq
+      shell: bash
       env:
-        PWNREQ_REF: ${{ github.action_ref }}
+        IN_VERSION: ${{ inputs.version }}
+        ACTION_REF: ${{ github.action_ref }}
+      run: |
+        set -euo pipefail
+        ver="${IN_VERSION:-}"
+        [ -z "$ver" ] && ver="${ACTION_REF:-}"
+        dir="$RUNNER_TEMP/pwnreq-bin"; mkdir -p "$dir"
+        exe=pwnreq; [ "$RUNNER_OS" = Windows ] && exe=pwnreq.exe
+        if [[ "$ver" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+          case "$RUNNER_OS" in Linux) os=linux;; macOS) os=darwin;; Windows) os=windows;; *) echo "unsupported OS $RUNNER_OS"; exit 1;; esac
+          case "$RUNNER_ARCH" in X64) arch=amd64;; ARM64) arch=arm64;; *) echo "unsupported arch $RUNNER_ARCH"; exit 1;; esac
+          ext=tar.gz; [ "$os" = windows ] && ext=zip
+          file="pwnreq_${ver#v}_${os}_${arch}.${ext}"
+          base="https://github.com/ucsurf/pwnreq/releases/download/${ver}"
+          curl -fsSL --retry 3 -o "$dir/$file" "$base/$file"
+          curl -fsSL --retry 3 -o "$dir/checksums.txt" "$base/checksums.txt"
+          ( cd "$dir"
+            grep " ${file}\$" checksums.txt > want.txt
+            if command -v sha256sum >/dev/null; then sha256sum -c want.txt; else shasum -a 256 -c want.txt; fi
+            if [ "$ext" = zip ]; then unzip -oq "$file" "$exe"; else tar -xzf "$file" "$exe"; fi )
+          echo "pwnreq ${ver} (release binary, checksum verified)"
+        else
+          command -v go >/dev/null || { echo "Go is required to build pwnreq from source; pin the action to a release tag or set 'version'"; exit 1; }
+          ( cd "$GITHUB_ACTION_PATH" && go build -trimpath -o "$dir/$exe" ./cmd/pwnreq )
+          echo "pwnreq built from source at ${ver:-HEAD}"
+        fi
+        echo "$dir" >> "$GITHUB_PATH"
+    - name: Scan
+      shell: bash
+      env:
         IN_PATH: ${{ inputs.path }}
         IN_SEV: ${{ inputs.min-severity }}
         IN_SARIF: ${{ inputs.sarif }}
       run: |
-        GOBIN="$RUNNER_TEMP/pwnreq-bin" go install "github.com/ucsurf/pwnreq/cmd/pwnreq@${PWNREQ_REF:-latest}"
-        bin="$RUNNER_TEMP/pwnreq-bin/pwnreq"
         if [ -n "$IN_SARIF" ]; then
-          "$bin" -format sarif -min-severity "$IN_SEV" $IN_PATH > "$IN_SARIF" || true
+          pwnreq -format sarif -min-severity "$IN_SEV" $IN_PATH > "$IN_SARIF" || true
         fi
-        "$bin" -min-severity "$IN_SEV" $IN_PATH
+        pwnreq -min-severity "$IN_SEV" $IN_PATH

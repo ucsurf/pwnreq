@@ -8,6 +8,8 @@
 
 `pwnreq` does one thing: it reports workflows where **someone without write access can run code with your secrets**. No config, no noise from style or hardening rules. Every finding is something an outsider could trigger.
 
+![demo](docs/demo.gif)
+
 ```sh
 go install github.com/ucsurf/pwnreq/cmd/pwnreq@latest
 ```
@@ -81,7 +83,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - uses: ucsurf/pwnreq@v0.1.0
+      - uses: ucsurf/pwnreq@v0.1.1
         with:
           sarif: pwnreq.sarif
       - if: always()
@@ -90,14 +92,16 @@ jobs:
           sarif_file: pwnreq.sarif
 ```
 
-Inputs: `path` (default `.`), `min-severity` (`medium`/`high`), `sarif` (path for a SARIF report).
+Inputs: `path` (default `.`), `min-severity` (`medium`/`high`), `sarif` (path for a SARIF report), `version` (release to use; defaults to the tag you pinned).
+
+The action downloads the prebuilt release binary for the runner (Linux, macOS, Windows; x64 and arm64) and verifies it against `checksums.txt`, so it adds about a second to your job and needs no Go toolchain. Pinned to a branch or commit SHA instead of a tag, it builds from source with the runner's Go.
 
 ## pre-commit
 
 ```yaml
 repos:
   - repo: https://github.com/ucsurf/pwnreq
-    rev: v0.1.0
+    rev: v0.1.1
     hooks:
       - id: pwnreq
 ```
