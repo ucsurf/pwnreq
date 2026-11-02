@@ -1,8 +1,10 @@
 # pwnreq
 
 [![CI](https://github.com/ucsurf/pwnreq/actions/workflows/ci.yml/badge.svg)](https://github.com/ucsurf/pwnreq/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/ucsurf/pwnreq)](https://github.com/ucsurf/pwnreq/releases/latest)
 [![Go Reference](https://pkg.go.dev/badge/github.com/ucsurf/pwnreq.svg)](https://pkg.go.dev/github.com/ucsurf/pwnreq)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/ucsurf/pwnreq/badge)](https://scorecard.dev/viewer/?uri=github.com/ucsurf/pwnreq)
 
 **Find exploitable "pwn requests" and script injection in GitHub Actions — in one repo or across a whole org, without cloning anything.**
 
@@ -15,6 +17,10 @@ go install github.com/ucsurf/pwnreq/cmd/pwnreq@latest
 ```
 
 Or grab a binary from the [releases](https://github.com/ucsurf/pwnreq/releases).
+
+## Why
+
+Pwn requests (`pull_request_target` or `workflow_run` plus a checkout of untrusted code) and `${{ }}` script injection are the GitHub Actions bugs that actually leak secrets and tokens. General linters bury them among dozens of hardening warnings, and most of them need a local clone. `pwnreq` reports only what an outsider can trigger, and it can sweep a whole org through the API in seconds.
 
 ## Example
 
@@ -129,6 +135,12 @@ Targets (default: current directory):
 Tuned against ~2,000 real workflows from ~350 public repos that use `pull_request_target`, `workflow_run` or `issue_comment`. False positives we found (event-name guards, push-only `workflow_run`, steps that never execute the checkout, duplicate hits) are covered by tests. It's static analysis: a finding means "an outsider can probably reach this", so confirm before reporting. If you find a false positive or a miss, please [open an issue](https://github.com/ucsurf/pwnreq/issues) with the workflow.
 
 If you report a finding to another project, [disclose](https://github.com/ucsurf/disclose) tells you where to send it privately.
+
+## Limitations
+
+- Analysis is per workflow file. Reusable workflows (`uses: ./.github/workflows/x.yml`) and composite actions are not followed into.
+- `if:` conditions are only understood for common shapes. `github.event_name ==` checks that exclude privileged triggers suppress a finding. Actor, author-association, label and same-repo/fork checks keep the finding but add a "verify the gate" note. Other guards are not recognized.
+- It does not judge what the checked-out code does. It assumes running a build, install or test step on PR code is code execution.
 
 ## License
 
